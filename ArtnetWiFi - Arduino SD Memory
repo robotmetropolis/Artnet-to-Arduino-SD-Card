@@ -1,5 +1,8 @@
 // este código configura el dispositivo para recibir datos Art-Net a través de WiFi, controla una tira de LEDs WS2812
-// y guarda los datos recibidos en una tarjeta SD. También realiza una secuencia de prueba en los LEDs al inicio.
+// y guarda los datos recibidos en una tarjeta SD, dentro de un archivo llamado data.txt. 
+// Se puede recibir la data desde Resolume, por ejemplo.
+// También realiza una secuencia de prueba en los LEDs al inicio.
+// Buscar en el mismo repositorio el codigo para reproducir desde el data.txt y enviarlo a los pixel leds.
 
 #include <ArtnetWifi.h>
 #include <Arduino.h>
