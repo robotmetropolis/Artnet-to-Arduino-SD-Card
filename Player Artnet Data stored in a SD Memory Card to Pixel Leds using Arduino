@@ -1,0 +1,66 @@
+// este código lee un archivo de datos desde una tarjeta SD y utiliza los valores de color en el archivo para
+// controlar una tira de LEDs mediante la biblioteca FastLED. Permite reproducir una secuencia de colores
+// almacenada en el archivo de manera continua.
+
+#include <SPI.h>
+#include <SD.h>
+#include <FastLED.h>
+
+#define NUM_LEDS 170  // Cambiar según el número de LEDs que estés utilizando
+#define LED_PIN 5
+#define COLOR_ORDER GRB
+
+CRGB leds[NUM_LEDS];
+
+const int SD_CS = D8;  // Pin D8 (GPIO 15) como chip select para la tarjeta SD
+const char* filename = "/data.txt";  // Nombre del archivo de datos
+
+File dataFile;
+
+void setup() {
+  Serial.begin(115200);
+  
+  FastLED.addLeds<WS2812, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS);
+  FastLED.setBrightness(128);  // Cambiar según el brillo deseado
+
+  if (!SD.begin(SD_CS)) {
+    Serial.println("Error al inicializar la tarjeta SD!");
+    while (1);
+  }
+
+  dataFile = SD.open(filename);
+  if (!dataFile) {
+    Serial.println("Error al abrir el archivo!");
+    while (1);
+  }
+}
+
+void loop() {
+  // Leer el frame de datos del archivo
+  if (dataFile.available()) {
+    String data = dataFile.readStringUntil('\n');
+    data.trim();
+    
+    // Eliminar espacios en blanco
+  //  data.replace(" ", "");
+    
+    // Parsear los valores RGB y actualizar los LEDs
+    int index = 0;
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int r = data.substring(index, index + 3).toInt();
+      int g = data.substring(index + 3, index + 6).toInt();
+      int b = data.substring(index + 6, index + 9).toInt();
+      
+      leds[i] = CRGB(r, g, b);
+     // Serial.println(r);
+      index += 9;
+    }
+    
+    FastLED.show();
+  } else {
+    // Reiniciar el archivo al final si se llega al final del mismo
+    dataFile.seek(0);
+  }
+  
+  delay(33);  // Retraso entre frames (ajustar según el tiempo de frame)
+}
