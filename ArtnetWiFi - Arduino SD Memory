@@ -1,0 +1,255 @@
+// este código configura el dispositivo para recibir datos Art-Net a través de WiFi, controla una tira de LEDs WS2812
+// y guarda los datos recibidos en una tarjeta SD. También realiza una secuencia de prueba en los LEDs al inicio.
+
+#include <ArtnetWifi.h>
+#include <Arduino.h>
+#include <FastLED.h>
+#include <SD.h>
+
+ 
+
+// Wifi settings
+const char* ssid = "XXXXXXXXXX";
+const char* password = "XXXXXXXXX";
+const IPAddress ip(192, 168, 0, 200);
+const IPAddress gateway(192, 168, 0, 1);
+const IPAddress subnet(255, 255, 255, 0);
+
+ 
+
+// LED settings
+const int numLeds = 170;
+const int numberOfChannels = numLeds * 3;
+const byte dataPin = 5;
+CRGB leds[numLeds];
+
+ 
+
+// Art-Net settings
+ArtnetWifi artnet;
+const int startUniverse = 0;
+
+ 
+
+const int maxUniverses = numberOfChannels / 512 + ((numberOfChannels % 512) ? 1 : 0);
+bool universesReceived[maxUniverses];
+bool sendFrame = 1;
+
+ 
+
+// SD card settings
+const int SD_CS = D8; // Pin D8 (GPIO 15) como chip select para la tarjeta SD
+
+ 
+
+const int maxFramesToRecord = 900;
+int recordedFrames = 0;
+
+ 
+
+// Flag to indicate if the file has been saved
+bool fileSaved = false;
+
+ 
+
+// connect to wifi – returns true if successful or false if not
+bool ConnectWifi()
+{
+  bool state = true;
+  int i = 0;
+
+ 
+
+  WiFi.begin(ssid, password);
+  Serial.println("");
+  Serial.println("Connecting to WiFi");
+  WiFi.config(ip, gateway, subnet);
+
+ 
+
+  Serial.print("Connecting");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+    if (i > 20)
+    {
+      state = false;
+      break;
+    }
+    i++;
+  }
+  if (state)
+  {
+    Serial.println("");
+    Serial.print("Connected to ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+  }
+  else
+  {
+    Serial.println("");
+    Serial.println("Connection failed.");
+  }
+
+ 
+
+  return state;
+}
+
+ 
+
+void initTest()
+{
+  // Turn all LEDs off
+  FastLED.clear();
+  FastLED.show();
+  delay(500);
+
+ 
+
+  // Set all LEDs to red
+  fill_solid(leds, numLeds, CRGB::Red);
+  FastLED.show();
+  delay(500);
+
+ 
+
+  // Set all LEDs to green
+  fill_solid(leds, numLeds, CRGB::Green);
+  FastLED.show();
+  delay(500);
+
+ 
+
+  // Set all LEDs to blue
+  fill_solid(leds, numLeds, CRGB::Blue);
+  FastLED.show();
+  delay(500);
+
+ 
+
+  // Turn all LEDs off
+  FastLED.clear();
+  FastLED.show();
+}
+
+ 
+
+void onDmxFrame(uint16_t universe, uint16_t length, uint8_t sequence, uint8_t* data)
+{
+
+  // Send data to LED pixels
+  for (int i = 0; i < length / 3; i++)
+  {
+    int led = i + (universe * 170);
+    if (led < numLeds)
+    {
+      leds[led] = CRGB(data[i * 3], data[i * 3 + 1], data[i * 3 + 2]);
+    }
+  }
+  FastLED.show();
+
+ 
+
+  // Check if SD card is initialized and available
+  if (SD.begin(SD_CS) && fileSaved == false)
+  {
+    // Write received data to SD card if the number of recorded frames is less than the maximum
+    if (recordedFrames < maxFramesToRecord)
+    {
+      // Write received data to SD card
+      File dataFile = SD.open("/data.txt", FILE_WRITE);
+      if (dataFile)
+      {
+        for (int i = 0; i < length; i++)
+        {
+          
+          dataFile.print(completarConCeros(data[i]));
+          //dataFile.print(" ");
+        }
+        dataFile.println();
+        dataFile.close();
+        Serial.println("Datos guardados en la memoria SD");
+        recordedFrames++;
+
+ 
+
+        // Check if the maximum number of frames has been reached
+        if (recordedFrames >= maxFramesToRecord)
+        {
+          fileSaved = true;
+        }
+      }
+      else
+      {
+        Serial.println("Error al abrir el archivo");
+      }
+    }
+
+ 
+
+    // Check if the file has been saved
+    if (fileSaved)
+    {
+      // Print information about the file
+      File dataFile = SD.open("/data.txt");
+      if (dataFile)
+      {
+        Serial.print("Nombre del archivo: ");
+        Serial.println(dataFile.name());
+        Serial.print("Tamaño del archivo: ");
+        Serial.println(dataFile.size());
+        dataFile.close();
+       
+      }
+      else
+      {
+        Serial.println("Error al abrir el archivo");
+      }
+    }
+
+    // Deinitialize SD card
+    SD.end();
+  }
+  else
+  {
+ //   Serial.println("Error al inicializar la tarjeta SD");
+  }
+}
+
+String completarConCeros(int numero) {
+  String resultado = String(numero); // Convierte el número en una cadena de caracteres
+
+  // Verifica si el número es más corto que la longitud deseada
+  if (resultado.length() < 3) {
+    int cerosFaltantes = 3 - resultado.length();
+
+    // Agrega ceros a la izquierda
+    for (int i = 0; i < cerosFaltantes; i++) {
+      resultado = "0" + resultado;
+    }
+  }
+  return resultado;
+  }
+   
+
+void setup()
+{
+  Serial.begin(115200);
+  ConnectWifi();
+  artnet.begin();
+  FastLED.addLeds<WS2812, dataPin, GRB>(leds, numLeds);
+  initTest();
+
+  memset(universesReceived, 0, maxUniverses);
+  artnet.setArtDmxCallback(onDmxFrame);
+}
+
+ 
+
+void loop()
+{
+  artnet.read();
+}
